@@ -57,12 +57,32 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       # -------------------------
-      # Save to tar and upload
+      # Create artifact for Synology
       # -------------------------
-      - name: Save Docker image to tar
-        run: docker save ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:main -o ohc-profiles-bot.tar
 
-      - name: Upload artifact
+      # Figure out what tag we just built (branch/tag name)
+      - name: Compute image tag
+        id: picktag
+        run: |
+          if [ "${{ github.ref_type }}" = "branch" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="main"
+          fi
+          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+
+      # Pull the image we just pushed so it's available locally
+      - name: Pull image from GHCR
+        run: docker pull ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.picktag.outputs.TAG }}
+
+      # Save it to a tarball
+      - name: Save Docker image to tar
+        run: docker save ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.picktag.outputs.TAG }} -o ohc-profiles-bot.tar
+
+      # Upload the tarball as a GitHub Action artifact
+      - name: Upload artifact (tar)
         uses: actions/upload-artifact@v4
         with:
           name: ohc-profiles-bot-image
