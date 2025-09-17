@@ -55,3 +55,15 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # -------------------------
+      # Save to tar and upload
+      # -------------------------
+      - name: Save Docker image to tar
+        run: docker save ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:main -o ohc-profiles-bot.tar
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ohc-profiles-bot-image
+          path: ohc-profiles-bot.tar
