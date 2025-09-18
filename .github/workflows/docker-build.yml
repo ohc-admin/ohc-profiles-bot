@@ -50,8 +50,17 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:main
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+- name: Build & Push (multi-arch)
+  uses: docker/build-push-action@v6
+  with:
+    context: .
+    file: ./Dockerfile
+    push: true
+    platforms: linux/amd64,linux/arm64
+    tags: |
+      ohctyler/ohc-profiles-bot:main
+      ohctyler/ohc-profiles-bot:${{ github.sha }}
+
 
       - name: Move Buildx cache
         run: |
