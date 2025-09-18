@@ -633,7 +633,7 @@ client.once('ready', async () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
 
   const channelId = process.env.LEADERBOARD_CHANNEL_ID;
-  const cronExpr  = process.env.LEADERBOARD_CRON || '0 12 * * MON'; // Monday 12:00 PM (America/Detroit)
+  const cronExpr  = process.env.LEADERBOARD_CRON || '0 10 * * MON'; // Monday 10:00 AM (America/Detroit)
 
   if (!channelId) {
     console.warn('LEADERBOARD_CHANNEL_ID not set; weekly leaderboard disabled.');
