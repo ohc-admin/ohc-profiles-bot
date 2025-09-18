@@ -31,7 +31,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # (Optional) Enable build cache between runs
+      # Optional: cache to speed up builds
       - name: Configure Buildx cache
         uses: actions/cache@v4
         with:
@@ -50,10 +50,9 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:main
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ohctyler/${{ env.IMAGE_NAME }}:main
+            ohctyler/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      # Move cache (workaround for buildx cache path change)
       - name: Move Buildx cache
         run: |
           rm -rf /tmp/.buildx-cache
