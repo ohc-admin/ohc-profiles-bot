@@ -7,10 +7,12 @@ const {
 } = require('discord.js');
 const Database = require('better-sqlite3');
 const cron = require('node-cron');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 // =========================
-// CUSTOM ICONS (EDIT IDs)
+/* CUSTOM ICONS (EDIT IDs) */
 // =========================
 const ICONS = {
   platform: {
@@ -37,7 +39,7 @@ const ICONS = {
 const SEP = '──────────';
 
 // =========================
-// ROLE-DRIVEN PROFILE CONFIG
+/* ROLE-DRIVEN PROFILE CONFIG */
 // =========================
 const ROLE_CONFIG = {
   prefixes: { team: null, tz: null, region: null },
@@ -64,7 +66,7 @@ const ROLE_CONFIG = {
 };
 
 // =========================
-// FALLBACK ICONS
+/* FALLBACK ICONS */
 // =========================
 const PLACEMENT_ICON = { champ: ICONS.trophies.gold };
 const AWARD_ICON = {
@@ -76,9 +78,19 @@ const AWARD_ICON = {
 };
 
 // =========================
- // DB INIT + SCHEMA
+/* DB INIT + SCHEMA (PERSISTENT via DB_PATH) */
 // =========================
-const db = new Database('ohc_profiles.db');
+const DEFAULT_DB_PATH = path.join(__dirname, 'ohc_profiles.db');
+const DB_PATH = process.env.DB_PATH || DEFAULT_DB_PATH;
+
+// Ensure the directory for the DB exists (handles /app/data mapping)
+try {
+  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+} catch (_) {}
+
+console.log(`📀 Using database at: ${DB_PATH}`);
+const db = new Database(DB_PATH);
+
 db.exec(`
 PRAGMA journal_mode=WAL;
 
@@ -134,7 +146,7 @@ CREATE TABLE IF NOT EXISTS settings (
 `);
 
 // =========================
-// HELPERS
+/* HELPERS */
 // =========================
 const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 
@@ -243,7 +255,7 @@ function getAwardsFromRoles(member) {
 }
 
 // =========================
-// LEADERBOARD (Gold-only) helpers
+/* LEADERBOARD (Gold-only) helpers */
 // =========================
 function buildGoldLeaderboard(limit = 10) {
   const query = `
@@ -295,7 +307,7 @@ async function postOrUpdateGoldLeaderboard(channelId) {
 }
 
 // =========================
-// SLASH COMMANDS
+/* SLASH COMMANDS */
 // =========================
 const commands = [
   new SlashCommandBuilder().setName('link-gt').setDescription('Link your gamertag')
@@ -338,7 +350,7 @@ const commands = [
 })();
 
 // =========================
-// CLIENT + HANDLERS
+/* CLIENT + HANDLERS */
 // =========================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
@@ -618,7 +630,7 @@ client.on('interactionCreate', async (i) => {
 
 // Login & schedule weekly leaderboard
 client.once('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`🤖 Logged in as ${client.user.tag}`);
 
   const channelId = process.env.LEADERBOARD_CHANNEL_ID;
   const cronExpr  = process.env.LEADERBOARD_CRON || '0 12 * * MON'; // Monday 12:00 PM (America/Detroit)
