@@ -281,7 +281,7 @@ function buildGoldLeaderboard(limit = 10) {
     .setColor(0xFFD700) // esports gold
     .setTitle('🥇 Gold Leaderboard')
     .setDescription(lines)
-    .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
+    .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
     .setTimestamp(new Date());
 }
 
@@ -576,7 +576,7 @@ client.on('interactionCreate', async (i) => {
         .setColor(0xFFD700)
         .setTitle('🥇 Gold Leaderboard')
         .setDescription(lines)
-        .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
+        .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
         .setTimestamp(new Date());
       await i.reply({ content:'Leaderboard posted/updated!', ephemeral:true });
       await i.channel.send({ embeds:[embed] });
