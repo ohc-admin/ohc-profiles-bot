@@ -46,7 +46,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push
+      - name: Build & Push (multi-arch)
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -57,33 +57,33 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       # -------------------------
-      # Create artifact for Synology
+      # Export tarballs for Synology import
       # -------------------------
 
-      # Figure out what tag we just built (branch/tag name)
-      - name: Compute image tag
-        id: picktag
+      - name: Build ARM64 tar (Synology aarch64)
         run: |
-          if [ "${{ github.ref_type }}" = "branch" ]; then
-            TAG="${{ github.ref_name }}"
-          elif [ "${{ github.ref_type }}" = "tag" ]; then
-            TAG="${{ github.ref_name }}"
-          else
-            TAG="main"
-          fi
-          echo "TAG=$TAG" >> $GITHUB_OUTPUT
+          docker buildx build \
+            --platform linux/arm64 \
+            -t ohc-profiles-bot:arm64 \
+            -o type=docker,dest=ohc-profiles-bot-arm64.tar \
+            .
 
-      # Pull the image we just pushed so it's available locally
-      - name: Pull image from GHCR
-        run: docker pull ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.picktag.outputs.TAG }}
-
-      # Save it to a tarball
-      - name: Save Docker image to tar
-        run: docker save ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.picktag.outputs.TAG }} -o ohc-profiles-bot.tar
-
-      # Upload the tarball as a GitHub Action artifact
-      - name: Upload artifact (tar)
+      - name: Upload ARM64 tar
         uses: actions/upload-artifact@v4
         with:
-          name: ohc-profiles-bot-image
-          path: ohc-profiles-bot.tar
+          name: ohc-profiles-bot-arm64
+          path: ohc-profiles-bot-arm64.tar
+
+      - name: Build AMD64 tar (Synology x86_64)
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -t ohc-profiles-bot:amd64 \
+            -o type=docker,dest=ohc-profiles-bot-amd64.tar \
+            .
+
+      - name: Upload AMD64 tar
+        uses: actions/upload-artifact@v4
+        with:
+          name: ohc-profiles-bot-amd64
+          path: ohc-profiles-bot-amd64.tar
