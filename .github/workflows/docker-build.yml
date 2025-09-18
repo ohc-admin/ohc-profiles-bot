@@ -50,8 +50,8 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
           tags: |
-            ohctyler/${{ env.IMAGE_NAME }}:main
-            ohctyler/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:main
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
       - name: Move Buildx cache
         run: |
