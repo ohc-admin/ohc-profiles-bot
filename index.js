@@ -16,24 +16,24 @@ require('dotenv').config();
 // =========================
 const ICONS = {
   platform: {
-    'battle.net': '<:battlenet:>',
-    'battlenet':  '<:battlenet:>',
-    'psn':        '<:psn:>',
-    'playstation':'<:psn:>',
-    'xbox':       '<:xbox:>',
-    'xboxlive':   '<:xbox:>',
-    'discord':    '<:discord:>'
+    'battle.net': '<:battlenet:1417979381590261770>',
+    'battlenet':  '<:battlenet:1417979381590261770>',
+    'psn':        '<:psn:1417979466856005754>',
+    'playstation':'<:psn:1417979466856005754>',
+    'xbox':       '<:xbox:1417979454172430337>',
+    'xboxlive':   '<:xbox:1417979454172430337>',
+    'discord':    '<:discord:1417980038384586773>'
   },
   trophies: {
-    gold:   '<:goldtrophy:>',   // your uploaded PNG emoji IDs
-    silver: '<:silvertrophy:>',
-    bronze: '<:bronzetrophy:>',
+    gold:   '<:goldtrophy:1417977872651522089>',   // your uploaded PNG emoji IDs
+    silver: '<:silvertrophy:1417977917136306227>',
+    bronze: '<:bronzetrophy:1417977901143425146>',
     award:  '🏆'
   },
   streams: {
-    twitch:  '<:twitch:>',
-    youtube: '<:youtube:>',
-    kick:    '<:kick:>'
+    twitch:  '<:twitch:1417979483927089152>',
+    youtube: '<:youtube:1417979428532781218>',
+    kick:    '<:kick:1417979406520942683>'
   }
 };
 const SEP = '──────────';
@@ -281,7 +281,7 @@ function buildGoldLeaderboard(limit = 10) {
     .setColor(0xFFD700) // esports gold
     .setTitle('🥇 Gold Leaderboard')
     .setDescription(lines)
-    .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
+    .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
     .setTimestamp(new Date());
 }
 
@@ -310,35 +310,65 @@ async function postOrUpdateGoldLeaderboard(channelId) {
 /* SLASH COMMANDS */
 // =========================
 const commands = [
+  // Link / unlink gamertag
   new SlashCommandBuilder().setName('link-gt').setDescription('Link your gamertag')
     .addStringOption(o=>o.setName('gamertag').setDescription('Your gamertag').setRequired(true))
     .addStringOption(o=>o.setName('platform').setDescription('Battle.net / PSN / Xbox').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('unlink-gt')
+    .setDescription('Remove your linked gamertag and platform from your profile'),
 
+  // Link / unlink streams
   new SlashCommandBuilder().setName('link-streams').setDescription('Link your Twitch/YouTube/Kick URLs')
     .addStringOption(o=>o.setName('twitch').setDescription('https://twitch.tv/...'))
     .addStringOption(o=>o.setName('youtube').setDescription('YouTube Live/Channel URL'))
     .addStringOption(o=>o.setName('kick').setDescription('https://kick.com/...')),
+  new SlashCommandBuilder()
+    .setName('unlink-streams')
+    .setDescription('Remove one of your linked streams or all of them')
+    .addStringOption(o =>
+      o.setName('service')
+       .setDescription('Which stream to remove')
+       .setRequired(true)
+       .addChoices(
+         { name: 'Twitch',  value: 'twitch' },
+         { name: 'YouTube', value: 'youtube' },
+         { name: 'Kick',    value: 'kick' },
+         { name: 'All',     value: 'all' }
+       )
+    ),
 
+  // Results / awards (staff)
   new SlashCommandBuilder().setName('record-result').setDescription('Record podium for an event (Staff only)')
     .addStringOption(o=>o.setName('event').setDescription('Event name').setRequired(true))
     .addUserOption(o=>o.setName('gold').setDescription('Gold winner').setRequired(true))
     .addUserOption(o=>o.setName('silver').setDescription('Silver winner').setRequired(true))
     .addUserOption(o=>o.setName('bronze').setDescription('Bronze winner').setRequired(true)),
-
   new SlashCommandBuilder().setName('award').setDescription('Give a custom award (Staff only)')
     .addStringOption(o=>o.setName('event').setDescription('Event name').setRequired(true))
     .addUserOption(o=>o.setName('user').setDescription('Player').setRequired(true))
     .addStringOption(o=>o.setName('label').setDescription('e.g., MVP').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('remove-trophy')
+    .setDescription('Remove the most recent gold/silver/bronze trophy from a user (Staff only)')
+    .addUserOption(o => o.setName('user').setDescription('Player').setRequired(true))
+    .addStringOption(o =>
+      o.setName('type')
+       .setDescription('Trophy type to remove')
+       .setRequired(true)
+       .addChoices(
+         { name: 'Gold 🥇', value: 'gold' },
+         { name: 'Silver 🥈', value: 'silver' },
+         { name: 'Bronze 🥉', value: 'bronze' }
+       )
+    ),
 
+  // Profile & posting
   new SlashCommandBuilder().setName('profile').setDescription('Show a profile')
     .addUserOption(o=>o.setName('user').setDescription('Which user?')),
-
-  // Staff: post/update the Gold leaderboard in the current channel
   new SlashCommandBuilder().setName('post-leaderboard')
     .setDescription('Post or update the Gold trophies leaderboard here (Staff only)')
     .addIntegerOption(o=>o.setName('limit').setDescription('Top N (default 10)')),
-
-  // Staff: post the welcome/setup guide embed
   new SlashCommandBuilder().setName('post-welcome')
     .setDescription('Post the OHC profile setup guide (Staff only)'),
 ].map(c=>c.toJSON());
@@ -364,7 +394,7 @@ client.on('interactionCreate', async (i) => {
       const teamName = i.customId.replace('profile-teamroster-', '').trim();
       if (!teamName || teamName === 'F/A') {
         return i.reply({ content: 'This player is a Free Agent and has no team roster.', ephemeral: true });
-      }
+        }
       const role = i.guild.roles.cache.find(r => r.name.toLowerCase() === teamName.toLowerCase());
       if (!role) return i.reply({ content: `No team role found for **${teamName}**.`, ephemeral: true });
 
@@ -402,6 +432,7 @@ client.on('interactionCreate', async (i) => {
 
   const isStaff = i.member?.roles?.cache?.some(r => r.name.toLowerCase() === 'staff') || i.memberPermissions?.has('Administrator');
 
+  // Link / unlink gamertag
   if (i.commandName === 'link-gt') {
     ensurePlayer(i.user);
     const gamertag = i.options.getString('gamertag', true);
@@ -410,7 +441,17 @@ client.on('interactionCreate', async (i) => {
       .run(gamertag, platform, i.member?.displayName || i.user.username, i.user.id);
     return i.reply({ content: `Linked **${gamertag}** (${platform}).`, ephemeral: true });
   }
+  if (i.commandName === 'unlink-gt') {
+    ensurePlayer(i.user);
+    const before = db.prepare(`SELECT gamertag, platform FROM players WHERE discord_id=?`).get(i.user.id);
+    if (!before || (!before.gamertag && !before.platform)) {
+      return i.reply({ content: 'You don’t have a gamertag linked.', ephemeral: true });
+    }
+    db.prepare(`UPDATE players SET gamertag=NULL, platform=NULL WHERE discord_id=?`).run(i.user.id);
+    return i.reply({ content: 'Your gamertag and platform have been unlinked from your profile.', ephemeral: true });
+  }
 
+  // Link / unlink streams
   if (i.commandName === 'link-streams') {
     ensurePlayer(i.user);
     const twitch  = i.options.getString('twitch');
@@ -438,7 +479,26 @@ client.on('interactionCreate', async (i) => {
     if (!count) return i.reply({ content:'No URLs provided.', ephemeral:true });
     return i.reply({ content:`Linked ${count} stream${count>1?'s':''}.`, ephemeral:true });
   }
+  if (i.commandName === 'unlink-streams') {
+    ensurePlayer(i.user);
+    const service = i.options.getString('service', true);
 
+    if (service === 'all') {
+      const changes = db.prepare(`DELETE FROM streams WHERE player_id=?`).run(i.user.id).changes;
+      if (!changes) {
+        return i.reply({ content: 'No streams were linked on your profile.', ephemeral: true });
+      }
+      return i.reply({ content: 'All linked streams have been removed from your profile.', ephemeral: true });
+    }
+
+    const changes = db.prepare(`DELETE FROM streams WHERE player_id=? AND service=?`).run(i.user.id, service).changes;
+    if (!changes) {
+      return i.reply({ content: `No ${service} stream was linked on your profile.`, ephemeral: true });
+    }
+    return i.reply({ content: `Your ${service} stream has been removed from your profile.`, ephemeral: true });
+  }
+
+  // Results / awards (staff)
   if (i.commandName === 'record-result') {
     if (!isStaff) return i.reply({ content:'Staff only.', ephemeral:true });
     const eventName = i.options.getString('event', true);
@@ -465,6 +525,30 @@ client.on('interactionCreate', async (i) => {
     return i.reply({ content:`Gave **${label}** to ${user} for **${eventName}**.` });
   }
 
+  if (i.commandName === 'remove-trophy') {
+    if (!isStaff) return i.reply({ content: 'Staff only.', ephemeral: true });
+
+    const user = i.options.getUser('user', true);
+    const type = i.options.getString('type', true);
+
+    ensurePlayer(user);
+
+    const row = db.prepare(`
+      SELECT id FROM trophies
+      WHERE player_id = ? AND type = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+    `).get(user.id, type);
+
+    if (!row) {
+      return i.reply({ content: `${user} has no ${type} trophies to remove.`, ephemeral: true });
+    }
+
+    db.prepare(`DELETE FROM trophies WHERE id = ?`).run(row.id);
+    return i.reply({ content: `Removed one **${type}** trophy from ${user}.` });
+  }
+
+  // Profile & posting
   if (i.commandName === 'profile') {
     const user = i.options.getUser('user') || i.user;
     ensurePlayer(user);
@@ -554,7 +638,6 @@ client.on('interactionCreate', async (i) => {
     const limit = i.options.getInteger('limit') || 10;
     // Post/update in current channel
     await (async () => {
-      // Temporarily build with custom limit for this one-off post
       const query = `
         SELECT p.display_name name, COUNT(*) score
         FROM trophies t
@@ -576,7 +659,7 @@ client.on('interactionCreate', async (i) => {
         .setColor(0xFFD700)
         .setTitle('🥇 Gold Leaderboard')
         .setDescription(lines)
-        .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
+        .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
         .setTimestamp(new Date());
       await i.reply({ content:'Leaderboard posted/updated!', ephemeral:true });
       await i.channel.send({ embeds:[embed] });
@@ -603,7 +686,7 @@ client.on('interactionCreate', async (i) => {
         },
         {
           name: '📺 Step 3: Link Your Streams (optional)',
-          value: '```\n/link-streams twitch:https://twitch.tv/yourname\nyoutube:https://youtube.com/@yourchannel\nkick:https://kick.com/yourname\n```',
+          value: '```\n/link-streams twitch:https://twitch.tv/yourname\n/link-streams youtube:https://youtube.com/@yourchannel\n/link-streams kick:https://kick.com/yourname\n```',
           inline: false
         },
         {
@@ -633,7 +716,7 @@ client.once('ready', async () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
 
   const channelId = process.env.LEADERBOARD_CHANNEL_ID;
-  const cronExpr  = process.env.LEADERBOARD_CRON || '0 10 * * MON'; // Monday 10:00 AM (America/Detroit)
+  const cronExpr  = process.env.LEADERBOARD_CRON || '0 12 * * MON'; // Monday 12:00 PM (America/Detroit)
 
   if (!channelId) {
     console.warn('LEADERBOARD_CHANNEL_ID not set; weekly leaderboard disabled.');
