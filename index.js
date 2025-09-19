@@ -157,7 +157,7 @@ function ensurePlayer(user) {
   upsertPlayerRow({ id: user.id, name: user.globalName || user.username });
 }
 
-// --- prefer & persist guild nickname (displayName) ---
+// Prefer & persist guild nickname (displayName)
 function upsertPlayerDisplay({ id, display }) {
   db.prepare(`
     INSERT INTO players (discord_id, display_name)
@@ -265,25 +265,36 @@ function getAwardsFromRoles(member) {
 }
 
 // =========================
-/* LEADERBOARD (Gold-only) helpers */
+/* LEADERBOARD (Gold-only) — uses guild nicknames */
 // =========================
-function buildGoldLeaderboard(limit = 10) {
-  const query = `
-    SELECT p.display_name name, COUNT(*) score
+async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
+  const rows = db.prepare(`
+    SELECT t.player_id AS id,
+           COALESCE(p.display_name, t.player_id) AS fallback,
+           COUNT(*) AS score
     FROM trophies t
     JOIN players p ON p.discord_id = t.player_id
     WHERE t.type = 'gold'
     GROUP BY t.player_id
-    ORDER BY score DESC, name ASC
+    ORDER BY score DESC, fallback ASC
     LIMIT ?
-  `;
-  const rows = db.prepare(query).all(limit);
+  `).all(limit);
+
+  let fetched = null;
+  try {
+    const ids = rows.map(r => r.id);
+    fetched = await guild.members.fetch({ user: ids, withPresences: false });
+  } catch {
+    fetched = null;
+  }
 
   const lines = rows.length
     ? rows.map((r, idx) => {
+        const member = fetched?.get(r.id);
+        const name = member?.displayName || r.fallback || r.id;
         const place = idx + 1;
         const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : `#${place}`;
-        return `${medal} **${r.name}** — ${r.score}`;
+        return `${medal} **${name}** — ${r.score}`;
       }).join('\n')
     : '—';
 
@@ -291,7 +302,7 @@ function buildGoldLeaderboard(limit = 10) {
     .setColor(0xFFD700)
     .setTitle('🥇 Gold Leaderboard')
     .setDescription(lines)
-    .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
+    .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
     .setTimestamp(new Date());
 }
 
@@ -299,7 +310,7 @@ async function postOrUpdateGoldLeaderboard(channelId) {
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return;
 
-  const embed = buildGoldLeaderboard(10);
+  const embed = await buildGoldLeaderboardEmbed(channel.guild, 1000);
   const key = `gold_lb_msg_${channelId}`;
   const lastId = getSetting(key);
 
@@ -394,13 +405,13 @@ const commands = [
     .addUserOption(o=>o.setName('user').setDescription('Which user?')),
   new SlashCommandBuilder().setName('post-leaderboard')
     .setDescription('Post or update the Gold trophies leaderboard here (Staff only)')
-    .addIntegerOption(o=>o.setName('limit').setDescription('Top N (default 10)')),
+    .addIntegerOption(o=>o.setName('limit').setDescription('Top N (default 1000)')),
 ].map(c=>c.toJSON());
 
 // Register once on boot (guild-fast if GUILD_ID is set)
 (async () => {
   try {
-    const body = commands; // built above
+    const body = commands;
     if (process.env.GUILD_ID) {
       await rest.put(
         Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
@@ -486,11 +497,11 @@ client.on('interactionCreate', async (i) => {
   if (i.commandName === 'link-gt') {
     ensurePlayer(i.user);
     const gamertag = i.options.getString('gamertag', true);
-    const platform = i.options.getString('platform', true);
+    thePlatform = i.options.getString('platform', true);
     const display = i.member?.displayName || i.user.username;
     db.prepare(`UPDATE players SET gamertag=?, platform=?, display_name=? WHERE discord_id=?`)
-      .run(gamertag, platform, display, i.user.id);
-    return i.reply({ content: `Linked **${gamertag}** (${platform}).`, ephemeral: true });
+      .run(gamertag, thePlatform, display, i.user.id);
+    return i.reply({ content: `Linked **${gamertag}** (${thePlatform}).`, ephemeral: true });
   }
   if (i.commandName === 'unlink-gt') {
     ensurePlayer(i.user);
@@ -711,31 +722,9 @@ client.on('interactionCreate', async (i) => {
 
   if (i.commandName === 'post-leaderboard') {
     if (!isStaff) return i.reply({ content:'Staff only.', ephemeral:true });
-    const limit = i.options.getInteger('limit') || 10;
+    const limit = i.options.getInteger('limit') || 1000;
 
-    const query = `
-      SELECT p.display_name name, COUNT(*) score
-      FROM trophies t
-      JOIN players p ON p.discord_id = t.player_id
-      WHERE t.type = 'gold'
-      GROUP BY t.player_id
-      ORDER BY score DESC, name ASC
-      LIMIT ?
-    `;
-    const rows = db.prepare(query).all(limit);
-    const lines = rows.length
-      ? rows.map((r, idx) => {
-          const place = idx + 1;
-          const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : `#${place}`;
-          return `${medal} **${r.name}** — ${r.score}`;
-        }).join('\n')
-      : '—';
-    const embed = new EmbedBuilder()
-      .setColor(0xFFD700)
-      .setTitle('🥇 Gold Leaderboard')
-      .setDescription(lines)
-      .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
-      .setTimestamp(new Date());
+    const embed = await buildGoldLeaderboardEmbed(i.guild, limit);
     await i.reply({ content:'Leaderboard posted/updated!', ephemeral:true });
     await i.channel.send({ embeds:[embed] });
     return;
@@ -747,13 +736,13 @@ client.once('ready', async () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
 
   const channelId = process.env.LEADERBOARD_CHANNEL_ID;
-  const cronExpr  = process.env.LEADERBOARD_CRON || '0 10 * * MON'; // Monday 10:00 AM (America/Detroit)
+  const cronExpr  = process.env.LEADERBOARD_CRON || '0 10 * * MON'; // Monday 10:00 (America/Detroit)
 
   if (!channelId) {
     console.warn('LEADERBOARD_CHANNEL_ID not set; weekly leaderboard disabled.');
   } else {
     try {
-      await postOrUpdateGoldLeaderboard(channelId);
+      await postOrUpdateGoldLeaderboard(channelId); // default 1000
       console.log('Gold leaderboard posted/updated on startup.');
     } catch (e) {
       console.warn('Could not post leaderboard on startup:', e?.message || e);
@@ -761,7 +750,7 @@ client.once('ready', async () => {
     try {
       cron.schedule(cronExpr, async () => {
         try {
-          await postOrUpdateGoldLeaderboard(channelId);
+          await postOrUpdateGoldLeaderboard(channelId); // default 1000
           console.log('Gold leaderboard auto-updated.');
         } catch (e) {
           console.warn('Auto-update failed:', e?.message || e);
@@ -769,9 +758,10 @@ client.once('ready', async () => {
       }, { timezone: 'America/Detroit' });
       console.log(`Weekly Gold leaderboard scheduled: "${cronExpr}" (America/Detroit)`);
     } catch (e) {
-      console.warn('Invalid LEADERBOARD_CRON. Example Monday noon = "0 10 * * MON"');
+      console.warn('Invalid LEADERBOARD_CRON. Example Monday 10:00 = "0 10 * * MON"');
     }
   }
 });
 
+// Register commands after client defined (keeps order tidy)
 client.login(process.env.BOT_TOKEN);
