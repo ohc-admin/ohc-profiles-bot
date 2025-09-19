@@ -7,7 +7,7 @@ OHC Discord bot for player **profiles** (gamertag, trophies, awards), **role-dri
 1. Create `.env` from `.env.example` and fill in:
    - BOT_TOKEN, CLIENT_ID
    - LEADERBOARD_CHANNEL_ID (channel where the gold leaderboard lives)
-   - (Optional) LEADERBOARD_CRON (default Monday 12:00 PM America/Detroit)
+   - (Optional) LEADERBOARD_CRON (default Monday 10:00 AM America/Detroit)
 
 2. Invite the bot (bot + applications.commands).  
    Enable **Server Members Intent** in Dev Portal.
@@ -23,7 +23,7 @@ OHC Discord bot for player **profiles** (gamertag, trophies, awards), **role-dri
 
 5. Staff use:
    - `/record-result` (gold/silver/bronze podium)
-   - Assign roles for placements/awards (e.g., `BO7 Season 3 Champ`, `BO7 S3 MVP`)
+   - Assign roles for placements/awards (e.g., `BO6 Season 1 Champ`, `BO6 S2 MVP`)
 
 Profiles show:
 - Team / Division / Region from roles
