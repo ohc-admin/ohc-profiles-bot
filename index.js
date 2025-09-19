@@ -397,10 +397,26 @@ const commands = [
     .addIntegerOption(o=>o.setName('limit').setDescription('Top N (default 10)')),
 ].map(c=>c.toJSON());
 
-// Register once on boot
+// Register once on boot (guild-fast if GUILD_ID is set)
 (async () => {
-  await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
-  console.log('Slash commands registered.');
+  try {
+    const body = commands; // built above
+    if (process.env.GUILD_ID) {
+      await rest.put(
+        Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID),
+        { body }
+      );
+      console.log(`Slash commands registered to guild ${process.env.GUILD_ID}. (fast)`);
+    } else {
+      await rest.put(
+        Routes.applicationCommands(process.env.CLIENT_ID),
+        { body }
+      );
+      console.log('Global slash commands registered. (may take a while to appear)');
+    }
+  } catch (err) {
+    console.error('Failed to register slash commands:', err);
+  }
 })();
 
 // =========================
