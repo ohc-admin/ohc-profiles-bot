@@ -16,24 +16,24 @@ require('dotenv').config();
 // =========================
 const ICONS = {
   platform: {
-    'battle.net': '<:battlenet:222222222222222222>',
-    'battlenet':  '<:battlenet:222222222222222222>',
-    'psn':        '<:psn:333333333333333333>',
-    'playstation':'<:psn:333333333333333333>',
-    'xbox':       '<:xbox:444444444444444444>',
-    'xboxlive':   '<:xbox:444444444444444444>',
-    'discord':    '<:discord:111111111111111111>'
+    'battle.net': '<:battlenet:1417979381590261770>',
+    'battlenet':  '<:battlenet:1417979381590261770>',
+    'psn':        '<:psn:1417979466856005754>',
+    'playstation':'<:psn:1417979466856005754>',
+    'xbox':       '<:xbox:1417979454172430337>',
+    'xboxlive':   '<:xbox:1417979454172430337>',
+    'discord':    '<:discord:1417980038384586773>'
   },
   trophies: {
-    gold:   '<:goldtrophy:555555555555555555>',   // replace with your real emoji tokens
-    silver: '<:silvertrophy:666666666666666666>',
-    bronze: '<:bronzetrophy:777777777777777777>',
+    gold:   '<:goldtrophy:1417977872651522089>',   // your uploaded PNG emoji IDs
+    silver: '<:silvertrophy:1417977917136306227>',
+    bronze: '<:bronzetrophy:1417977901143425146>',
     award:  '🏆'
   },
   streams: {
-    twitch:  '<:twitch:888888888888888888>',
-    youtube: '<:youtube:999999999999999999>',
-    kick:    '<:kick:101010101010101010>'
+    twitch:  '<:twitch:1417979483927089152>',
+    youtube: '<:youtube:1417979428532781218>',
+    kick:    '<:kick:1417979406520942683>'
   }
 };
 const SEP = '──────────';
