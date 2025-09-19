@@ -12,7 +12,7 @@ const fs = require('fs');
 require('dotenv').config();
 
 // =========================
-/* CUSTOM ICONS (EDIT IDs) */
+/* CUSTOM ICONS (YOUR IDs) */
 // =========================
 const ICONS = {
   platform: {
@@ -25,7 +25,7 @@ const ICONS = {
     'discord':    '<:discord:1417980038384586773>'
   },
   trophies: {
-    gold:   '<:goldtrophy:1417977872651522089>',   // your uploaded PNG emoji IDs
+    gold:   '<:goldtrophy:1417977872651522089>',
     silver: '<:silvertrophy:1417977917136306227>',
     bronze: '<:bronzetrophy:1417977901143425146>',
     award:  '🏆'
@@ -84,9 +84,7 @@ const DEFAULT_DB_PATH = path.join(__dirname, 'ohc_profiles.db');
 const DB_PATH = process.env.DB_PATH || DEFAULT_DB_PATH;
 
 // Ensure the directory for the DB exists (handles /app/data mapping)
-try {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-} catch {}
+try { fs.mkdirSync(path.dirname(DB_PATH), { recursive: true }); } catch {}
 console.log(`📀 Using database at: ${DB_PATH}`);
 
 const db = new Database(DB_PATH);
@@ -158,6 +156,21 @@ function upsertPlayerRow({ id, name, gt=null, pf=null }) {
 function ensurePlayer(user) {
   upsertPlayerRow({ id: user.id, name: user.globalName || user.username });
 }
+
+// --- prefer & persist guild nickname (displayName) ---
+function upsertPlayerDisplay({ id, display }) {
+  db.prepare(`
+    INSERT INTO players (discord_id, display_name)
+    VALUES (@id, @display)
+    ON CONFLICT(discord_id) DO UPDATE SET display_name=@display
+  `).run({ id, display });
+}
+function syncMemberDisplayName(member) {
+  if (!member) return;
+  const display = member.displayName || member.user?.globalName || member.user?.username;
+  if (display) upsertPlayerDisplay({ id: member.id, display });
+}
+
 function platformIconFor(pfRaw) {
   if (!pfRaw) return '';
   const key = String(pfRaw).toLowerCase().trim();
@@ -331,7 +344,7 @@ const commands = [
        )
     ),
 
-  // Results / awards (staff) — UPDATED to allow multiple winners per place (up to 5)
+  // Results / awards (staff) — allow multiple winners per medal (up to 5)
   (() => {
     const b = new SlashCommandBuilder()
       .setName('record-result')
@@ -341,21 +354,17 @@ const commands = [
          .setDescription('Event name')
          .setRequired(true)
       );
-
     // gold1 required, others optional
     b.addUserOption(o => o.setName('gold1').setDescription('Gold winner #1').setRequired(true));
     ['gold2','gold3','gold4','gold5'].forEach(n =>
       b.addUserOption(o => o.setName(n).setDescription(n.replace('gold','Gold winner #')).setRequired(false))
     );
-
-    ['silver1','silver2','silver3','silver4','silver5'].forEach((n, idx) =>
+    ['silver1','silver2','silver3','silver4','silver5'].forEach(n =>
       b.addUserOption(o => o.setName(n).setDescription(n.replace('silver','Silver winner #')).setRequired(false))
     );
-
     ['bronze1','bronze2','bronze3','bronze4','bronze5'].forEach(n =>
       b.addUserOption(o => o.setName(n).setDescription(n.replace('bronze','Bronze winner #')).setRequired(false))
     );
-
     return b;
   })(),
 
@@ -380,14 +389,12 @@ const commands = [
        )
     ),
 
-  // Profile & posting
+  // Profile & leaderboard posting
   new SlashCommandBuilder().setName('profile').setDescription('Show a profile')
     .addUserOption(o=>o.setName('user').setDescription('Which user?')),
   new SlashCommandBuilder().setName('post-leaderboard')
     .setDescription('Post or update the Gold trophies leaderboard here (Staff only)')
     .addIntegerOption(o=>o.setName('limit').setDescription('Top N (default 10)')),
-  new SlashCommandBuilder().setName('post-welcome')
-    .setDescription('Post the OHC profile setup guide (Staff only)'),
 ].map(c=>c.toJSON());
 
 // Register once on boot
@@ -401,6 +408,11 @@ const commands = [
 // =========================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
+});
+
+// keep display_name in DB synced with guild nickname
+client.on('guildMemberUpdate', (oldMem, newMem) => {
+  try { syncMemberDisplayName(newMem); } catch {}
 });
 
 client.on('interactionCreate', async (i) => {
@@ -446,6 +458,12 @@ client.on('interactionCreate', async (i) => {
   // ---------- Slash commands ----------
   if (!i.isChatInputCommand()) return;
 
+  // per-interaction nickname sync backstop
+  try {
+    const memberForSync = i.guild?.members?.cache?.get(i.user.id) || i.member;
+    if (memberForSync) syncMemberDisplayName(memberForSync);
+  } catch {}
+
   const isStaff = i.member?.roles?.cache?.some(r => r.name.toLowerCase() === 'staff') || i.memberPermissions?.has('Administrator');
 
   // Link / unlink gamertag
@@ -453,8 +471,9 @@ client.on('interactionCreate', async (i) => {
     ensurePlayer(i.user);
     const gamertag = i.options.getString('gamertag', true);
     const platform = i.options.getString('platform', true);
+    const display = i.member?.displayName || i.user.username;
     db.prepare(`UPDATE players SET gamertag=?, platform=?, display_name=? WHERE discord_id=?`)
-      .run(gamertag, platform, i.member?.displayName || i.user.username, i.user.id);
+      .run(gamertag, platform, display, i.user.id);
     return i.reply({ content: `Linked **${gamertag}** (${platform}).`, ephemeral: true });
   }
   if (i.commandName === 'unlink-gt') {
@@ -530,7 +549,7 @@ client.on('interactionCreate', async (i) => {
 
     const golds   = collect('gold',   5);
     const silvers = collect('silver', 5);
-    const bronzes  = collect('bronze', 5);
+    const bronzes = collect('bronze', 5);
 
     if (!golds.length && !silvers.length && !bronzes.length) {
       return i.reply({ content: 'Please provide at least one winner.', ephemeral: true });
@@ -549,12 +568,8 @@ client.on('interactionCreate', async (i) => {
     addMany(silvers, 'silver');
     addMany(bronzes, 'bronze');
 
-    const fmtLine = (arr, medal) => arr.length ? `${medal} ${arr.join(', ')}` : null;
-    const parts = [
-      fmtLine(golds, '🥇'),
-      fmtLine(silvers, '🥈'),
-      fmtLine(bronzes, '🥉')
-    ].filter(Boolean);
+    const fmtLine = (arr, medal) => arr.length ? `${medal} ${arr.map(u=>u.toString()).join(', ')}` : null;
+    const parts = [ fmtLine(golds, '🥇'), fmtLine(silvers, '🥈'), fmtLine(bronzes, '🥉') ].filter(Boolean);
 
     return i.reply({ content: `Recorded **${eventName}** podium:\n${parts.join('\n')}` });
   }
@@ -600,13 +615,16 @@ client.on('interactionCreate', async (i) => {
 
     const p = db.prepare(`SELECT display_name, gamertag, platform, created_at
                           FROM players WHERE discord_id=?`).get(user.id) || {};
+
+    const member = await i.guild.members.fetch(user.id).catch(() => null);
+    if (member) { try { syncMemberDisplayName(member); } catch {} }
+
     const totals = db.prepare(`
       SELECT SUM(type='gold')   AS gold,
              SUM(type='silver') AS silver,
              SUM(type='bronze') AS bronze
       FROM trophies WHERE player_id=?`).get(user.id);
 
-    const member = await i.guild.members.fetch(user.id).catch(() => null);
     const memberSince = member?.joinedAt
       ? member.joinedAt.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})
       : null;
@@ -635,10 +653,11 @@ client.on('interactionCreate', async (i) => {
     const byService = Object.fromEntries(streams.map(s => [s.service, s.url]));
 
     const pfIcon = platformIconFor(p.platform);
+    const liveDisplay = member?.displayName || p.display_name || user.username;
 
     const embed = new EmbedBuilder()
       .setColor(0xFFD700)
-      .setTitle(`👑 ${p.display_name || user.username}`)
+      .setTitle(`👑 ${liveDisplay}`)
       .setDescription(`*Gamertag:* \`${p.gamertag || '—'}\` ${pfIcon || ''}`)
       .addFields(
         { name: SEP, value: '\u200B' },
@@ -704,25 +723,6 @@ client.on('interactionCreate', async (i) => {
     await i.reply({ content:'Leaderboard posted/updated!', ephemeral:true });
     await i.channel.send({ embeds:[embed] });
     return;
-  }
-
-  if (i.commandName === 'post-welcome') {
-    if (!isStaff) return i.reply({ content: 'Staff only.', ephemeral: true });
-    const embed = new EmbedBuilder()
-      .setColor(0x00B5FF)
-      .setTitle('🎮 How to Set Up Your OHC Player Profile')
-      .setDescription('Welcome! Every player gets a profile card that shows your gamertag, trophies, awards, and more. Follow these quick steps:')
-      .addFields(
-        { name: '📝 Step 1: Roles', value: 'Staff will assign your **Team** (or **Free Agent**), **Division** (A–D), and **Region** (US-East, EU, etc.). Your profile pulls these from your roles automatically.' },
-        { name: '🎮 Step 2: Link Your Gamertag', value: '```\n/link-gt gamertag:<yourGamertagHere> platform:<Battle.net | PSN | Xbox>\n\nExample:\n/link-gt gamertag: KNUCKLES#1939585 platform: Battle.net\n```' },
-        { name: '📺 Step 3: Link Your Streams (optional)', value: '```\n/link-streams twitch:https://twitch.tv/yourname\n/link-streams youtube:https://youtube.com/@yourchannel\n/link-streams kick:https://kick.com/yourname\n```' },
-        { name: '🧩 What Shows On Your Card', value: '• Discord name & gamertag (with platform logo)\n• Member Since / Profile Created\n• Team · Division · Region' },
-        { name: '🏆 Achievements', value: '• Trophy totals: 🥇 🥈 🥉\n• Season Placements (from roles like **BO7 Season 3 Champ**)\n• Awards (e.g., **MVP**, **AR of the Year**)' },
-        { name: '👤 View Your Profile', value: '```\n/profile\n```' }
-      )
-      .setFooter({ text: 'Tip: You only need to /link-gt once. Everything else updates as you play and win.' });
-    await i.reply({ content: 'Posted the setup guide below 👇', ephemeral: true });
-    return i.channel.send({ embeds: [embed] });
   }
 });
 
