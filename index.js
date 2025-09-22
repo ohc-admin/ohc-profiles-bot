@@ -265,9 +265,10 @@ function getAwardsFromRoles(member) {
 }
 
 // =========================
-/* LEADERBOARD (Gold-only) — uses guild nicknames */
+/* LEADERBOARD (Gold-only) — uses guild nicknames and Hides Non-Members */
 // =========================
 async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
+  // 1) Query all candidates from DB
   const rows = db.prepare(`
     SELECT t.player_id AS id,
            COALESCE(p.display_name, t.player_id) AS fallback,
@@ -280,18 +281,40 @@ async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
     LIMIT ?
   `).all(limit);
 
-  let fetched = null;
-  try {
-    const ids = rows.map(r => r.id);
-    fetched = await guild.members.fetch({ user: ids, withPresences: false });
-  } catch {
-    fetched = null;
+  if (!rows.length) {
+    return new EmbedBuilder()
+      .setColor(0xFFD700)
+      .setTitle('🥇 Gold Leaderboard')
+      .setDescription('—')
+      .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
+      .setTimestamp(new Date());
   }
 
-  const lines = rows.length
-    ? rows.map((r, idx) => {
-        const member = fetched?.get(r.id);
-        const name = member?.displayName || r.fallback || r.id;
+  // 2) Bulk fetch only those IDs; collection will include ONLY members that are still in the guild
+  let foundMembers = null;
+  try {
+    const ids = rows.map(r => r.id);
+    // This returns a Collection of the members that exist in the guild (missing = not found/banned/left)
+    foundMembers = await guild.members.fetch({ user: ids, withPresences: false });
+  } catch {
+    // Fallback: fetch all members (requires GUILD_MEMBERS intent and may be large)
+    // If this fails too, we’ll show nothing to avoid listing non-members.
+    try {
+      foundMembers = await guild.members.fetch();
+    } catch {
+      foundMembers = null;
+    }
+  }
+
+  // 3) Filter out anyone not currently in the guild
+  const visible = foundMembers
+    ? rows.filter(r => foundMembers.has(r.id))
+    : []; // if we can’t verify, show nothing rather than include ex-members
+
+  const lines = visible.length
+    ? visible.map((r, idx) => {
+        const mem = foundMembers.get(r.id);
+        const name = mem?.displayName || r.fallback || r.id;
         const place = idx + 1;
         const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : place === 3 ? '🥉' : `#${place}`;
         return `${medal} **${name}** — ${r.score}`;
@@ -300,31 +323,10 @@ async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
 
   return new EmbedBuilder()
     .setColor(0xFFD700)
-    .setTitle('🥇 Gold Leaderboard')
+    .setTitle('🥇 Official Gold Trophy Leaderboard')
     .setDescription(lines)
     .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
     .setTimestamp(new Date());
-}
-
-async function postOrUpdateGoldLeaderboard(channelId) {
-  const channel = await client.channels.fetch(channelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) return;
-
-  const embed = await buildGoldLeaderboardEmbed(channel.guild, 1000);
-  const key = `gold_lb_msg_${channelId}`;
-  const lastId = getSetting(key);
-
-  if (lastId) {
-    try {
-      const msg = await channel.messages.fetch(lastId);
-      await msg.edit({ embeds: [embed] });
-      return;
-    } catch {
-      // message deleted; post a new one
-    }
-  }
-  const newMsg = await channel.send({ embeds: [embed] });
-  setSetting(key, newMsg.id);
 }
 
 // =========================
