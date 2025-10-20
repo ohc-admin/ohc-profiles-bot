@@ -35,15 +35,15 @@ const ICONS = {
     youtube: '<:youtube:1417979428532781218>',
     kick:    '<:kick:1417979406520942683>'
   },
-  // NEW: exact-role badges
+  // exact-role badges
   badges: {
     bo6s1champ: '<:BO6S1ChampRing:1429848953419206666>',
     bo6s2champ: '<:BO6S2ChampRing:1429848977494245557>',
     bo6s1mvp:   '<:BO6S1MVP:1429853354082963527>',
     bo61stteam: '<:BO6S11stTeam:1429948124490629262>',
     bo62ndteam: '<:BO6S12ndTeam:1429948143205875793>',
-    reaper: '<:8sReaper:1429955520973897860>'  // NEW: single emoji used for all months
-}
+    reaper:     '<:8sReaper:1429955520973897860>' // single emoji for all months
+  }
 };
 const SEP = '──────────';
 
@@ -75,9 +75,8 @@ const ROLE_CONFIG = {
 };
 
 // =========================
-/* FALLBACK ICONS */
+/* FALLBACK ICONS FOR GENERIC AWARDS */
 // =========================
-const PLACEMENT_ICON = { champ: ICONS.trophies.gold };
 const AWARD_ICON = {
   'mvp': ICONS.trophies.award,
   'ar of the year': ICONS.trophies.award,
@@ -166,20 +165,6 @@ function ensurePlayer(user) {
   upsertPlayerRow({ id: user.id, name: user.globalName || user.username });
 }
 
-// Parse "8s Reaper July 25'" → { label: "8s Reaper July ’25", emoji: ICONS.badges.reaper }
-function parseReaperRoleName(roleName) {
-  // Accept: 8s Reaper July 25'   (month word + 2-digit year + optional apostrophe)
-  const m = roleName.match(/^8s\s*Reaper\s+([A-Za-z]+)\s+(\d{2})'?$/i);
-  if (!m) return null;
-
-  const prettyMonth = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase(); // July
-  const yy = m[2]; // 25
-  const label = `8s Reaper ${prettyMonth} ’${yy}`;
-  const emoji = ICONS.badges?.reaper || ICONS.trophies.award;
-
-  return { label, emoji };
-}
-
 // Prefer & persist guild nickname (displayName)
 function upsertPlayerDisplay({ id, display }) {
   db.prepare(`
@@ -249,7 +234,7 @@ function getPlacementsFromRoles(member) {
   for (const role of member.roles.cache.values()) {
     const roleName = role.name.trim();
 
-    // exact-role badge overrides
+    // exact-role badges for champs
     if (roleName === 'BO6 Season 1 Champ') {
       out.push({ season: 'BO6 Season 1', placement: 'Champion', emoji: ICONS.badges.bo6s1champ });
       continue;
@@ -259,13 +244,13 @@ function getPlacementsFromRoles(member) {
       continue;
     }
 
-    // generic parser (other seasons/games)
+    // generic parser
     const m = roleName.match(RX);
     if (!m) continue;
     const gameTag = m[1].toUpperCase();
     const seasonNum = m[2];
     const seasonLabel = `${gameTag} Season ${seasonNum}`;
-    const emoji = role.unicodeEmoji || PLACEMENT_ICON.champ || ICONS.trophies.award;
+    const emoji = role.unicodeEmoji || ICONS.trophies.gold || ICONS.trophies.award;
     out.push({ season: seasonLabel, placement: 'Champion', emoji });
   }
   // Sort by game & season (newest first)
@@ -277,36 +262,48 @@ function getPlacementsFromRoles(member) {
   return out;
 }
 
-// --- awards from roles: include BO6 S1 MVP special badge + 8s Reaper ---
+// Helper: parse "8s Reaper July 25'" → { label, emoji }
+function parseReaperRoleName(roleName) {
+  const m = roleName.match(/^8s\s*Reaper\s+([A-Za-z]+)\s+(\d{2})'?$/i);
+  if (!m) return null;
+
+  const prettyMonth = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase(); // July
+  const yy = m[2]; // 25
+  const label = `8s Reaper ${prettyMonth} ’${yy}`;
+  const emoji = ICONS.badges?.reaper || ICONS.trophies.award;
+
+  return { label, emoji };
+}
+
+// --- awards from roles: include BO6 S1 MVP + 1st/2nd Team + 8s Reaper monthly ---
 function getAwardsFromRoles(member) {
   const RX = /^(BO\d+)\s+S(\d+)\s+(.+)$/i;
   const out = [];
-
   for (const role of member.roles.cache.values()) {
     const roleName = role.name.trim();
 
-    // NEW: detect "8s Reaper July 25'" (month/year changes)
+    // 8s Reaper (single emoji, dynamic month/year in label)
     const reaper = parseReaperRoleName(roleName);
     if (reaper) {
       out.push({ season: reaper.label, award: 'Reaper', emoji: reaper.emoji });
       continue;
     }
 
-    // Existing special badges
+    // exact-role special badges (ensure names match exactly)
     if (roleName === 'BO6 S1 MVP') {
       out.push({ season: 'BO6 Season 1', award: 'MVP', emoji: ICONS.badges.bo6s1mvp });
-      continue;
-    }
-    if (roleName === 'BO6 S1 - 2nd All-Star Team') {
-      out.push({ season: 'BO6 Season 1', award: '2nd Team All-Star', emoji: ICONS.badges.bo62ndteam });
       continue;
     }
     if (roleName === 'BO6 S1 - 1st All-Star Team') {
       out.push({ season: 'BO6 Season 1', award: '1st Team All-Star', emoji: ICONS.badges.bo61stteam });
       continue;
     }
+    if (roleName === 'BO6 S1 - 2nd All-Star Team') {
+      out.push({ season: 'BO6 Season 1', award: '2nd Team All-Star', emoji: ICONS.badges.bo62ndteam });
+      continue;
+    }
 
-    // Default BOx S# Award parsing
+    // generic BOx S# <Award> parsing
     const m = roleName.match(RX);
     if (!m) continue;
     const gameTag   = m[1].toUpperCase();
@@ -316,17 +313,15 @@ function getAwardsFromRoles(member) {
     const key = rawAward.toLowerCase();
     const emoji = role.unicodeEmoji || AWARD_ICON[key] || ICONS.trophies.award;
     const awardTitle = keepAcronyms(titleCase(rawAward));
-
     out.push({ season: seasonLabel, award: awardTitle, emoji });
   }
 
-  // Sort newest-first (same as before)
+  // Sort (newer-looking first)
   out.sort((a, b) => {
     const sv = s => parseInt(s.season.match(/Season\s+(\d+)/i)?.[1] || '0', 10);
     const gv = s => parseInt(s.season.match(/^BO(\d+)/i)?.[1] || '0', 10);
     return (gv(b) - gv(a)) || (sv(b) - sv(a));
   });
-
   return out;
 }
 
@@ -434,7 +429,7 @@ const commands = [
        )
     ),
 
-  // Results / awards (staff) — now up to 7 winners per medal
+  // Results / awards (staff) — up to 7 winners per medal
   (() => {
     const b = new SlashCommandBuilder()
       .setName('record-result')
@@ -843,5 +838,4 @@ client.once('ready', async () => {
   }
 });
 
-// Register commands after client defined (keeps order tidy)
 client.login(process.env.BOT_TOKEN);
