@@ -34,6 +34,12 @@ const ICONS = {
     twitch:  '<:twitch:1417979483927089152>',
     youtube: '<:youtube:1417979428532781218>',
     kick:    '<:kick:1417979406520942683>'
+  },
+  // NEW: exact-role badges
+  badges: {
+    bo6s1champ: '<:BO6S1ChampRing:1429848953419206666>',
+    bo6s2champ: '<:BO6S2ChampRing:1429848977494245557>',
+    bo6s1mvp:   '<:BO6S1MVP:1429853354082963527>',
   }
 };
 const SEP = '──────────';
@@ -219,12 +225,25 @@ function deriveFromRoles(member) {
   return { teamName, isFA, region, division };
 }
 
-// --- placements from roles: "BO6 Season 1 Champ" ---
+// --- placements from roles: "BO6 Season 1 Champ" (with custom badges when present) ---
 function getPlacementsFromRoles(member) {
   const RX = /^(BO\d+)\s+Season\s+(\d+)\s+Champ$/i;
   const out = [];
   for (const role of member.roles.cache.values()) {
-    const m = role.name.trim().match(RX);
+    const roleName = role.name.trim();
+
+    // exact-role badge overrides
+    if (roleName === 'BO6 Season 1 Champ') {
+      out.push({ season: 'BO6 Season 1', placement: 'Champion', emoji: ICONS.badges.bo6s1champ });
+      continue;
+    }
+    if (roleName === 'BO6 Season 2 Champ') {
+      out.push({ season: 'BO6 Season 2', placement: 'Champion', emoji: ICONS.badges.bo6s2champ });
+      continue;
+    }
+
+    // generic parser (other seasons/games)
+    const m = roleName.match(RX);
     if (!m) continue;
     const gameTag = m[1].toUpperCase();
     const seasonNum = m[2];
@@ -232,6 +251,7 @@ function getPlacementsFromRoles(member) {
     const emoji = role.unicodeEmoji || PLACEMENT_ICON.champ || ICONS.trophies.award;
     out.push({ season: seasonLabel, placement: 'Champion', emoji });
   }
+  // Sort by game & season (newest first)
   out.sort((a, b) => {
     const sv = s => parseInt(s.season.match(/Season\s+(\d+)/i)?.[1] || '0', 10);
     const gv = s => parseInt(s.season.match(/^BO(\d+)/i)?.[1] || '0', 10);
@@ -240,12 +260,19 @@ function getPlacementsFromRoles(member) {
   return out;
 }
 
-// --- awards from roles: "BO6 S1 MVP", "BO6 S1 AR of the Year", ... ---
+// --- awards from roles: include BO6 S1 MVP special badge ---
 function getAwardsFromRoles(member) {
   const RX = /^(BO\d+)\s+S(\d+)\s+(.+)$/i;
   const out = [];
   for (const role of member.roles.cache.values()) {
-    const m = role.name.trim().match(RX);
+    const roleName = role.name.trim();
+
+    if (roleName === 'BO6 S1 MVP') {
+      out.push({ season: 'BO6 Season 1', award: 'MVP', emoji: ICONS.badges.bo6s1mvp });
+      continue;
+    }
+
+    const m = roleName.match(RX);
     if (!m) continue;
     const gameTag = m[1].toUpperCase();
     const seasonNum = m[2];
@@ -265,10 +292,9 @@ function getAwardsFromRoles(member) {
 }
 
 // =========================
-/* LEADERBOARD (Gold-only) — uses guild nicknames and Hides Non-Members */
+/* LEADERBOARD (Gold-only) — uses guild nicknames & hides non-members */
 // =========================
 async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
-  // 1) Query all candidates from DB
   const rows = db.prepare(`
     SELECT t.player_id AS id,
            COALESCE(p.display_name, t.player_id) AS fallback,
@@ -290,15 +316,11 @@ async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
       .setTimestamp(new Date());
   }
 
-  // 2) Bulk fetch only those IDs; collection will include ONLY members that are still in the guild
   let foundMembers = null;
   try {
     const ids = rows.map(r => r.id);
-    // This returns a Collection of the members that exist in the guild (missing = not found/banned/left)
     foundMembers = await guild.members.fetch({ user: ids, withPresences: false });
   } catch {
-    // Fallback: fetch all members (requires GUILD_MEMBERS intent and may be large)
-    // If this fails too, we’ll show nothing to avoid listing non-members.
     try {
       foundMembers = await guild.members.fetch();
     } catch {
@@ -306,10 +328,7 @@ async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
     }
   }
 
-  // 3) Filter out anyone not currently in the guild
-  const visible = foundMembers
-    ? rows.filter(r => foundMembers.has(r.id))
-    : []; // if we can’t verify, show nothing rather than include ex-members
+  const visible = foundMembers ? rows.filter(r => foundMembers.has(r.id)) : [];
 
   const lines = visible.length
     ? visible.map((r, idx) => {
@@ -323,10 +342,29 @@ async function buildGoldLeaderboardEmbed(guild, limit = 1000) {
 
   return new EmbedBuilder()
     .setColor(0xFFD700)
-    .setTitle('🥇 Official Gold Trophy Leaderboard')
+    .setTitle('🥇 Gold Leaderboard')
     .setDescription(lines)
-    .setFooter({ text: 'OHC — Gold Trophies Only (1st place finishes)' })
+    .setFooter({ text: 'OHC — Gold trophies only (1st place finishes)' })
     .setTimestamp(new Date());
+}
+
+async function postOrUpdateGoldLeaderboard(channelId) {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isTextBased()) return;
+
+  const embed = await buildGoldLeaderboardEmbed(channel.guild, 1000);
+  const key = `gold_lb_msg_${channelId}`;
+  const lastId = getSetting(key);
+
+  if (lastId) {
+    try {
+      const msg = await channel.messages.fetch(lastId);
+      await msg.edit({ embeds: [embed] });
+      return;
+    } catch {}
+  }
+  const newMsg = await channel.send({ embeds: [embed] });
+  setSetting(key, newMsg.id);
 }
 
 // =========================
@@ -357,7 +395,7 @@ const commands = [
        )
     ),
 
-  // Results / awards (staff) — allow multiple winners per medal (up to 5)
+  // Results / awards (staff) — now up to 7 winners per medal
   (() => {
     const b = new SlashCommandBuilder()
       .setName('record-result')
@@ -367,16 +405,16 @@ const commands = [
          .setDescription('Event name')
          .setRequired(true)
       );
-    // gold1 required, others optional
+    // gold1 required, 2–7 optional
     b.addUserOption(o => o.setName('gold1').setDescription('Gold winner #1').setRequired(true));
-    ['gold2','gold3','gold4','gold5'].forEach(n =>
-      b.addUserOption(o => o.setName(n).setDescription(n.replace('gold','Gold winner #')).setRequired(false))
+    ['gold2','gold3','gold4','gold5','gold6','gold7'].forEach((n, idx) =>
+      b.addUserOption(o => o.setName(n).setDescription(`Gold winner #${idx+2}`).setRequired(false))
     );
-    ['silver1','silver2','silver3','silver4','silver5'].forEach(n =>
-      b.addUserOption(o => o.setName(n).setDescription(n.replace('silver','Silver winner #')).setRequired(false))
+    ['silver1','silver2','silver3','silver4','silver5','silver6','silver7'].forEach((n, idx) =>
+      b.addUserOption(o => o.setName(n).setDescription(`Silver winner #${idx+1}`).setRequired(false))
     );
-    ['bronze1','bronze2','bronze3','bronze4','bronze5'].forEach(n =>
-      b.addUserOption(o => o.setName(n).setDescription(n.replace('bronze','Bronze winner #')).setRequired(false))
+    ['bronze1','bronze2','bronze3','bronze4','bronze5','bronze6','bronze7'].forEach((n, idx) =>
+      b.addUserOption(o => o.setName(n).setDescription(`Bronze winner #${idx+1}`).setRequired(false))
     );
     return b;
   })(),
@@ -499,7 +537,7 @@ client.on('interactionCreate', async (i) => {
   if (i.commandName === 'link-gt') {
     ensurePlayer(i.user);
     const gamertag = i.options.getString('gamertag', true);
-    thePlatform = i.options.getString('platform', true);
+    const thePlatform = i.options.getString('platform', true);
     const display = i.member?.displayName || i.user.username;
     db.prepare(`UPDATE players SET gamertag=?, platform=?, display_name=? WHERE discord_id=?`)
       .run(gamertag, thePlatform, display, i.user.id);
@@ -562,11 +600,12 @@ client.on('interactionCreate', async (i) => {
     return i.reply({ content: `Your ${service} stream has been removed from your profile.`, ephemeral: true });
   }
 
-  // Results / awards (staff)
+  // Results / awards (staff) — up to 7 per medal
   if (i.commandName === 'record-result') {
     if (!isStaff) return i.reply({ content:'Staff only.', ephemeral:true });
 
     const eventName = i.options.getString('event', true);
+
     const collect = (prefix, max) => {
       const arr = [];
       for (let n = 1; n <= max; n++) {
@@ -576,9 +615,9 @@ client.on('interactionCreate', async (i) => {
       return arr;
     };
 
-    const golds   = collect('gold',   5);
-    const silvers = collect('silver', 5);
-    const bronzes = collect('bronze', 5);
+    const golds   = collect('gold',   7);
+    const silvers = collect('silver', 7);
+    const bronzes = collect('bronze', 7);
 
     if (!golds.length && !silvers.length && !bronzes.length) {
       return i.reply({ content: 'Please provide at least one winner.', ephemeral: true });
