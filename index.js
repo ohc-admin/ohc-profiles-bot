@@ -40,6 +40,8 @@ const ICONS = {
     bo6s1champ: '<:BO6S1ChampRing:1429848953419206666>',
     bo6s2champ: '<:BO6S2ChampRing:1429848977494245557>',
     bo6s1mvp:   '<:BO6S1MVP:1429853354082963527>',
+    bo61stteam: '<:BO6S11stTeam:1429948124490629262>',
+    bo62ndteam: '<:BO6S12ndTeam:1429948143205875793>'
   }
 };
 const SEP = '──────────';
@@ -269,6 +271,14 @@ function getAwardsFromRoles(member) {
 
     if (roleName === 'BO6 S1 MVP') {
       out.push({ season: 'BO6 Season 1', award: 'MVP', emoji: ICONS.badges.bo6s1mvp });
+      continue;
+    }
+    if (roleName === 'BO6 S1 - 2nd All-Star Team') {
+      out.push({ season: 'BO6 Season 1', award: '2nd Team All-Star', emoji: ICONS.badges.bo62ndteam });
+      continue;
+    }
+    if (roleName === 'BO6 S1 - 1st All-Star Team') {
+      out.push({ season: 'BO6 Season 1', award: '1st Team All-Star', emoji: ICONS.badges.bo61stteam });
       continue;
     }
 
