@@ -42,7 +42,17 @@ const ICONS = {
     bo6s1mvp:   '<:BO6S1MVP:1429853354082963527>',
     bo61stteam: '<:BO6S11stTeam:1429948124490629262>',
     bo62ndteam: '<:BO6S12ndTeam:1429948143205875793>',
-    reaper:     '<:8sReaper:1429955520973897860>' // single emoji for all months
+
+    // Season awards w/ custom emoji
+    arotsS1:    '<:ARotsS1:1430626777885315112>',     // BO6 S1 AR of the Season
+    smgotsS1:   '<:SMGotsS1:1430626779860566228>',    // BO6 S1 SMG of the Season
+
+    // NEW: extra S1 awards
+    biggestYapperS1:  '<:BiggestYapperS1:1430629638174150856>',   // BO6 S1 Biggest Yapper
+    positivePlayerS1: '<:PositivePlayerS1:1430629639994343474>',  // BO6 S1 Most Positive Player
+
+    // Reaper monthly (single emoji, month in text)
+    reaper:     '<:8sReaper:1429955520973897860>'
   }
 };
 const SEP = '──────────';
@@ -81,6 +91,8 @@ const AWARD_ICON = {
   'mvp': ICONS.trophies.award,
   'ar of the year': ICONS.trophies.award,
   'smg of the year': ICONS.trophies.award,
+  'ar of the season': ICONS.trophies.award,
+  'smg of the season': ICONS.trophies.award,
   'biggest yapper': ICONS.trophies.award,
   'most positive player': ICONS.trophies.award,
 };
@@ -275,7 +287,7 @@ function parseReaperRoleName(roleName) {
   return { label, emoji };
 }
 
-// --- awards from roles: include BO6 S1 MVP + 1st/2nd Team + 8s Reaper monthly ---
+// --- awards from roles: include MVP, All-Star, AR/SMG Season, Yapper/Positive, + 8s Reaper ---
 function getAwardsFromRoles(member) {
   const RX = /^(BO\d+)\s+S(\d+)\s+(.+)$/i;
   const out = [];
@@ -302,8 +314,25 @@ function getAwardsFromRoles(member) {
       out.push({ season: 'BO6 Season 1', award: '2nd Team All-Star', emoji: ICONS.badges.bo62ndteam });
       continue;
     }
+    if (roleName === 'BO6 S1 AR of the Season') {
+      out.push({ season: 'BO6 Season 1', award: 'AR of the Season', emoji: ICONS.badges.arotsS1 });
+      continue;
+    }
+    if (roleName === 'BO6 S1 SMG of the Season') {
+      out.push({ season: 'BO6 Season 1', award: 'SMG of the Season', emoji: ICONS.badges.smgotsS1 });
+      continue;
+    }
+    // NEW: biggest yapper / most positive player (exact names)
+    if (roleName === 'BO6 S1 Biggest Yapper') {
+      out.push({ season: 'BO6 Season 1', award: 'Biggest Yapper', emoji: ICONS.badges.biggestYapperS1 });
+      continue;
+    }
+    if (roleName === 'BO6 S1 Most Positive Player') {
+      out.push({ season: 'BO6 Season 1', award: 'Most Positive Player', emoji: ICONS.badges.positivePlayerS1 });
+      continue;
+    }
 
-    // generic BOx S# <Award> parsing
+    // generic BOx S# <Award> parsing (fallback)
     const m = roleName.match(RX);
     if (!m) continue;
     const gameTag   = m[1].toUpperCase();
