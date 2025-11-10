@@ -39,6 +39,7 @@ const ICONS = {
   badges: {
     bo6s1champ: '<:BO6S1ChampRing:1429848953419206666>',
     bo6s2champ: '<:BO6S2ChampRing:1429848977494245557>',
+    bo6draftchamp: '<:BO6DraftChampRing:1437453326244642816>',
     bo6s1mvp:   '<:BO6S1MVP:1429853354082963527>',
     bo61stteam: '<:BO6S11stTeam:1429948124490629262>',
     bo62ndteam: '<:BO6S12ndTeam:1429948143205875793>',
@@ -253,6 +254,10 @@ function getPlacementsFromRoles(member) {
     }
     if (roleName === 'BO6 Season 2 Champ') {
       out.push({ season: 'BO6 Season 2', placement: 'Champion', emoji: ICONS.badges.bo6s2champ });
+      continue;
+    }
+    if (roleName === 'BO6 Draft League Champ') {
+      out.push({ season: 'BO6 Draft League', placement: 'Champion', emoji: ICONS.badges.bo6draftchamp });
       continue;
     }
 
